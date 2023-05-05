@@ -60,7 +60,7 @@ class NWWebSocketTests: XCTestCase {
         try! Self.server.start()
         let serverURL = URL(string: "ws://localhost:\(Self.validLocalhostServerPort)")!
         Self.socket = NWWebSocket(url: serverURL)
-        Self.socket.delegate = self
+//        Self.socket.delegate = self
         Self.receivedPongTimestamps = []
     }
 
@@ -109,7 +109,7 @@ class NWWebSocketTests: XCTestCase {
     func testReceiveError() {
         // Redefine socket with invalid path
         Self.socket = NWWebSocket(request: URLRequest(url: URL(string: "ws://localhost:\(Self.invalidLocalhostServerPort)")!))
-        Self.socket.delegate = self
+//        Self.socket.delegate = self
 
         Self.errorExpectation = XCTestExpectation(description: "errorExpectation")
         Self.socket.connect()

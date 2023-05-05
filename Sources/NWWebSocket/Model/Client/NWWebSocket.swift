@@ -1,13 +1,28 @@
 import Foundation
 import Network
 
+extension AsyncStream {
+  public static func streamWithContinuation(
+    _ elementType: Element.Type = Element.self,
+    bufferingPolicy limit: Continuation.BufferingPolicy = .unbounded
+  ) -> (stream: Self, continuation: Continuation) {
+    var continuation: Continuation!
+    return (Self(elementType, bufferingPolicy: limit) { continuation = $0 }, continuation)
+  }
+}
+
 /// A WebSocket client that manages a socket connection.
 open class NWWebSocket: WebSocketConnection {
 
     // MARK: - Public properties
 
     /// The WebSocket connection delegate.
-    public weak var delegate: WebSocketConnectionDelegate?
+//    public weak var delegate: WebSocketConnectionDelegate?
+    public let stateUpdate = AsyncStream<NWConnection.State>.streamWithContinuation()
+    public let viability = AsyncStream<Bool>.streamWithContinuation()
+    public let messageReceived = AsyncStream<URLSessionWebSocketTask.Message>.streamWithContinuation()
+    public let errorReceived = AsyncStream<Error>.streamWithContinuation()
+    public let pongReceived = AsyncStream<Void>.streamWithContinuation()
 
     /// The default `NWProtocolWebSocket.Options` for a WebSocket connection.
     ///
@@ -84,7 +99,7 @@ open class NWWebSocket: WebSocketConnection {
         if connection == nil {
             connection = NWConnection(to: endpoint, using: parameters)
             connection?.stateUpdateHandler = stateDidChange(to:)
-            connection?.betterPathUpdateHandler = betterPath(isAvailable:)
+//            connection?.betterPathUpdateHandler = betterPath(isAvailable:)
             connection?.viabilityUpdateHandler = viabilityDidChange(isViable:)
             listen()
             connection?.start(queue: connectionQueue)
@@ -157,7 +172,8 @@ open class NWWebSocket: WebSocketConnection {
             if let error = error {
                 self.reportErrorOrDisconnection(error)
             } else {
-                self.delegate?.webSocketDidReceivePong(connection: self)
+                self.pongReceived.continuation.yield()
+//                self.delegate?.webSocketDidReceivePong(connection: self)
             }
         }
         let context = NWConnection.ContentContext(identifier: "pingContext",
@@ -195,9 +211,12 @@ open class NWWebSocket: WebSocketConnection {
     /// The handler for managing changes to the `connection.state` via the `stateUpdateHandler` on a `NWConnection`.
     /// - Parameter state: The new `NWConnection.State`
     private func stateDidChange(to state: NWConnection.State) {
+        self.stateUpdate.continuation.yield(state)
+        
         switch state {
         case .ready:
-            delegate?.webSocketDidConnect(connection: self)
+            break
+//            delegate?.webSocketDidConnect(connection: self)
         case .waiting(let error):
             reportErrorOrDisconnection(error)
         case .failed(let error):
@@ -213,22 +232,23 @@ open class NWWebSocket: WebSocketConnection {
 
     /// The handler for informing the `delegate` if there is a better network path available
     /// - Parameter isAvailable: `true` if a better network path is available.
-    private func betterPath(isAvailable: Bool) {
-        if isAvailable {
-            migrateConnection { [weak self] result in
-                guard let self = self else {
-                    return
-                }
-
-                self.delegate?.webSocketDidAttemptBetterPathMigration(result: result)
-            }
-        }
-    }
+//    private func betterPath(isAvailable: Bool) {
+//        if isAvailable {
+//            migrateConnection { [weak self] result in
+//                guard let self = self else {
+//                    return
+//                }
+//
+//                self.delegate?.webSocketDidAttemptBetterPathMigration(result: result)
+//            }
+//        }
+//    }
 
     /// The handler for informing the `delegate` if the network connection viability has changed.
     /// - Parameter isViable: `true` if the network connection is viable.
     private func viabilityDidChange(isViable: Bool) {
-        delegate?.webSocketViabilityDidChange(connection: self, isViable: isViable)
+        self.viability.continuation.yield(isViable)
+//        delegate?.webSocketViabilityDidChange(connection: self, isViable: isViable)
     }
 
     /// Attempts to migrate the active `connection` to a new one.
@@ -236,37 +256,37 @@ open class NWWebSocket: WebSocketConnection {
     /// Migrating can be useful if the active `connection` detects that a better network path has become available.
     /// - Parameter completionHandler: Returns a `Result`with the new connection if the migration was successful
     /// or a `NWError` if the migration failed for some reason.
-    private func migrateConnection(completionHandler: @escaping (Result<WebSocketConnection, NWError>) -> Void) {
-
-        let migratedConnection = NWConnection(to: endpoint, using: parameters)
-        migratedConnection.stateUpdateHandler = { [weak self] state in
-            guard let self = self else {
-                return
-            }
-
-            switch state {
-            case .ready:
-                self.connection = nil
-                migratedConnection.stateUpdateHandler = self.stateDidChange(to:)
-                migratedConnection.betterPathUpdateHandler = self.betterPath(isAvailable:)
-                migratedConnection.viabilityUpdateHandler = self.viabilityDidChange(isViable:)
-                self.connection = migratedConnection
-                self.listen()
-                completionHandler(.success(self))
-            case .waiting(let error):
-                completionHandler(.failure(error))
-            case .failed(let error):
-                completionHandler(.failure(error))
-            case .setup, .preparing:
-                break
-            case .cancelled:
-                completionHandler(.failure(.posix(.ECANCELED)))
-            @unknown default:
-                fatalError()
-            }
-        }
-        migratedConnection.start(queue: connectionQueue)
-    }
+//    private func migrateConnection(completionHandler: @escaping (Result<WebSocketConnection, NWError>) -> Void) {
+//
+//        let migratedConnection = NWConnection(to: endpoint, using: parameters)
+//        migratedConnection.stateUpdateHandler = { [weak self] state in
+//            guard let self = self else {
+//                return
+//            }
+//
+//            switch state {
+//            case .ready:
+//                self.connection = nil
+//                migratedConnection.stateUpdateHandler = self.stateDidChange(to:)
+//                migratedConnection.betterPathUpdateHandler = self.betterPath(isAvailable:)
+//                migratedConnection.viabilityUpdateHandler = self.viabilityDidChange(isViable:)
+//                self.connection = migratedConnection
+//                self.listen()
+//                completionHandler(.success(self))
+//            case .waiting(let error):
+//                completionHandler(.failure(error))
+//            case .failed(let error):
+//                completionHandler(.failure(error))
+//            case .setup, .preparing:
+//                break
+//            case .cancelled:
+//                completionHandler(.failure(.posix(.ECANCELED)))
+//            @unknown default:
+//                fatalError()
+//            }
+//        }
+//        migratedConnection.start(queue: connectionQueue)
+//    }
 
     // MARK: Connection data transfer
 
@@ -281,8 +301,9 @@ open class NWWebSocket: WebSocketConnection {
 
         switch metadata.opcode {
         case .binary:
-            self.delegate?.webSocketDidReceiveMessage(connection: self,
-                                                      data: data)
+            self.messageReceived.continuation.yield(.data(data))
+//            self.delegate?.webSocketDidReceiveMessage(connection: self,
+//                                                      data: data)
         case .cont:
             //
             break
@@ -290,8 +311,9 @@ open class NWWebSocket: WebSocketConnection {
             guard let string = String(data: data, encoding: .utf8) else {
                 return
             }
-            self.delegate?.webSocketDidReceiveMessage(connection: self,
-                                                      string: string)
+            self.messageReceived.continuation.yield(.string(string))
+//            self.delegate?.webSocketDidReceiveMessage(connection: self,
+//                                                      string: string)
         case .close:
             scheduleDisconnectionReporting(closeCode: metadata.closeCode,
                                            reason: data)
@@ -346,9 +368,9 @@ open class NWWebSocket: WebSocketConnection {
         disconnectionWorkItem?.cancel()
 
         disconnectionWorkItem = DispatchWorkItem {
-            self.delegate?.webSocketDidDisconnect(connection: self,
-                                                  closeCode: closeCode,
-                                                  reason: reason)
+//            self.delegate?.webSocketDidDisconnect(connection: self,
+//                                                  closeCode: closeCode,
+//                                                  reason: reason)
         }
     }
 
@@ -359,7 +381,8 @@ open class NWWebSocket: WebSocketConnection {
     /// - Parameter error: error description
     private func tearDownConnection(error: NWError?) {
         if let error = error, shouldReportNWError(error) {
-            delegate?.webSocketDidReceiveError(connection: self, error: error)
+            self.errorReceived.continuation.yield(error)
+//            delegate?.webSocketDidReceiveError(connection: self, error: error)
         }
         pingTimer?.invalidate()
         connection = nil
@@ -374,7 +397,8 @@ open class NWWebSocket: WebSocketConnection {
     /// - Parameter error: The `NWError` to inspect.
     private func reportErrorOrDisconnection(_ error: NWError) {
         if shouldReportNWError(error) {
-            delegate?.webSocketDidReceiveError(connection: self, error: error)
+            self.errorReceived.continuation.yield(error)
+//            delegate?.webSocketDidReceiveError(connection: self, error: error)
         }
 
         if isDisconnectionNWError(error) {

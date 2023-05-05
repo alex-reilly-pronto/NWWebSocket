@@ -29,7 +29,7 @@ public protocol WebSocketConnection {
     func disconnect(closeCode: NWProtocolWebSocket.CloseCode)
 
     /// The WebSocket connection delegate.
-    var delegate: WebSocketConnectionDelegate? { get set }
+//    var delegate: WebSocketConnectionDelegate? { get set }
 }
 
 /// Defines a delegate for a WebSocket connection.
