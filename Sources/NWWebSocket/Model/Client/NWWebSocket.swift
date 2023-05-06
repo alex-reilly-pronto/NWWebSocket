@@ -199,6 +199,7 @@ open class NWWebSocket: WebSocketConnection {
           self.pongReceived.continuation.yield()
           continuation.resume()
         }
+        metadata.setPongHandler(self.connectionQueue, handler: { _ in })
       }
       
       let context = NWConnection.ContentContext(
