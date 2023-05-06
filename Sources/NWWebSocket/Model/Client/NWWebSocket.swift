@@ -184,7 +184,7 @@ open class NWWebSocket: WebSocketConnection {
     pingTimer?.tolerance = 0.01
   }
   
-  open func ping() async throws {
+  open func asyncPing() async throws {
     try await withCheckedThrowingContinuation { continuation in
       let metadata = NWProtocolWebSocket.Metadata(opcode: .ping)
       metadata.setPongHandler(connectionQueue) { [weak self] error in
