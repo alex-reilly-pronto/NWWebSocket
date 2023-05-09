@@ -2,7 +2,7 @@ import Foundation
 import Network
 
 extension AsyncStream {
-  public static func streamWithContinuation(
+  static func streamWithContinuation(
     _ elementType: Element.Type = Element.self,
     bufferingPolicy limit: Continuation.BufferingPolicy = .unbounded
   ) -> (stream: Self, continuation: Continuation) {
@@ -185,27 +185,35 @@ open class NWWebSocket: WebSocketConnection {
   }
   
   open func asyncPing() async throws {
+    let id = UUID()
     try await withCheckedThrowingContinuation { continuation in
       let metadata = NWProtocolWebSocket.Metadata(opcode: .ping)
+      var didResume = false
       metadata.setPongHandler(connectionQueue) { [weak self] error in
+        guard !didResume else {
+          return
+        }
+        didResume = true
         guard let self = self else {
           return continuation.resume()
         }
         
         if let error = error {
+          print("pong error", error, id)
           self.reportErrorOrDisconnection(error)
           continuation.resume(throwing: error)
         } else {
+          print("pong", id)
           self.pongReceived.continuation.yield()
           continuation.resume()
         }
-        metadata.setPongHandler(self.connectionQueue, handler: { _ in })
       }
       
       let context = NWConnection.ContentContext(
         identifier: "pingContext",
         metadata: [metadata]
       )
+      print("ping", id)
       send(data: "ping".data(using: .utf8), context: context)
     }
   }
@@ -393,6 +401,7 @@ open class NWWebSocket: WebSocketConnection {
              socketMetadata.opcode == .close {
             self.scheduleDisconnectionReporting(closeCode: socketMetadata.closeCode,
                                                 reason: data)
+            return continuation.resume()
           }
           
           if let error = error {
